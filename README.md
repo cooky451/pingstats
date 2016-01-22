@@ -1,0 +1,2 @@
+# pingstats
+Ping monitoring tool
