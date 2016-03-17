@@ -1,0 +1,9 @@
+#pragma once
+
+#define WM_NOTIFICATIONICON (WM_APP + 1)
+
+#define ICON_DEFAULT 100
+
+#define TRAY_MENU 2200
+#define TRAY_MENU_SHOW 2201
+#define TRAY_MENU_CLOSE 2202

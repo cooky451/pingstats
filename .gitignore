@@ -1,0 +1,8 @@
+*.sdf
+*.opendb
+*.ipdb
+*.iobj
+*.tlog
+*.idb
+*.res
+/bin/
