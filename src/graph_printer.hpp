@@ -46,7 +46,7 @@ public:
 		std::string address = "auto4";
 		std::uint32_t delayMs = 500;
 		std::uint32_t timeoutMs = 2000;
-		bool async = false;
+		bool async = true;
 
 		std::string logfilename;
 		bool drawMeanGraph = false;
@@ -135,19 +135,22 @@ public:
 
 		for (auto& host : hosts->nodes())
 		{
-			_pingMonitors.emplace_back();
-			host->loadOrStore("Address", _pingMonitors.back().address);
-			host->loadOrStore("Logfile", _pingMonitors.back().logfilename);
-			host->loadOrStore("Timing.Delay", _pingMonitors.back().delayMs);
-			host->loadOrStore("Timing.Timeout", _pingMonitors.back().timeoutMs);
-			host->loadOrStore("Timing.Async", _pingMonitors.back().async);
-			host->loadOrStore("Graph.DrawMeanGraph", _pingMonitors.back().drawMeanGraph);
-			host->loadOrStore("Graph.DrawJitterGraph", _pingMonitors.back().drawJitterGraph);
-			host->loadOrStore("Graph.DrawLossGraph", _pingMonitors.back().drawLossGraph);
-			host->loadOrStore("Graph.PixelPerSecond", _pingMonitors.back().pixelPerSecond);
+			if (host->loadOrStoreIndirect("Enabled", true))
+			{
+				_pingMonitors.emplace_back();
+				host->loadOrStore("Address", _pingMonitors.back().address);
+				host->loadOrStore("Logfile", _pingMonitors.back().logfilename);
+				host->loadOrStore("Timing.Delay", _pingMonitors.back().delayMs);
+				host->loadOrStore("Timing.Timeout", _pingMonitors.back().timeoutMs);
+				host->loadOrStore("Timing.Async", _pingMonitors.back().async);
+				host->loadOrStore("Graph.DrawMeanGraph", _pingMonitors.back().drawMeanGraph);
+				host->loadOrStore("Graph.DrawJitterGraph", _pingMonitors.back().drawJitterGraph);
+				host->loadOrStore("Graph.DrawLossGraph", _pingMonitors.back().drawLossGraph);
+				host->loadOrStore("Graph.PixelPerSecond", _pingMonitors.back().pixelPerSecond);
+			}
 		}
 
-		RECT windowRect = { 0, 0, 540, static_cast<LONG>(240 * _pingMonitors.size()) };
+		RECT windowRect = { 0, 0, 560, static_cast<LONG>(240 * _pingMonitors.size()) };
 		AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, false);
 		_defaultWindowRect = windowRect;
 

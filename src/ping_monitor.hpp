@@ -3,8 +3,9 @@
 #include "utility/utility.hpp"
 #include "utility/stopwatch.hpp"
 
-#include <vector>
+#include <algorithm>
 #include <future>
+#include <vector>
 
 #include <Iphlpapi.h>
 #include <Icmpapi.h>
@@ -12,13 +13,18 @@
 class PingSample
 {
 public:
-	std::int64_t errorCode;
+	std::uint32_t errorCode;
 	std::chrono::steady_clock::time_point sentTime;
 	double roundtripTime;
 	double roundtripTimeMean;
 	double roundtripTimeJitter;
 	double lossPercentage;
 };
+
+bool operator < (const PingSample& lhs, const PingSample& rhs)
+{
+	return lhs.sentTime < rhs.sentTime;
+}
 
 class PingMonitor
 {
@@ -74,11 +80,12 @@ class PingMonitor
 	class IcmpPingResult
 	{
 	public:
-		std::int64_t errorCode;
+		std::uint32_t errorCode;
+		std::uint32_t statusCode;
 		std::chrono::steady_clock::time_point sentTime;
 		std::chrono::nanoseconds roundtripTime;
 		IpEndPoint responder;
-		std::string errorString;
+		std::string statusString;
 	};
 
 	typedef std::chrono::steady_clock::time_point (PingMonitor::* TickFunction) (std::function<void()>);
@@ -86,6 +93,7 @@ class PingMonitor
 	IpEndPoint _traceTargetServer = IpEndPoint(inet_addr("8.8.8.8"));
 	IpEndPoint _host = IpEndPoint(0);
 	std::uint8_t _hops = 0;
+	std::uint8_t _tries = 0;
 
 	std::chrono::milliseconds _delay;
 	std::chrono::milliseconds _timeout;
@@ -151,25 +159,61 @@ private:
 	{
 		using namespace std::chrono;
 
-		if (_pendingRequests.size() > 0 && _pendingRequests.back().valid())
+		if (_pendingRequests.size() > 0 &&
+			_pendingRequests.back().wait_for(seconds(0)) == std::future_status::ready)
 		{
 			auto pingResult = _pendingRequests.back().get();
 			_pendingRequests.pop_back();
 
-			if (pingResult.responder.isPublicAddress())
+			if (pingResult.errorCode == 0)
 			{
-				_host = pingResult.responder;
-				_tick = &PingMonitor::ping;
-				log(" [==+] Found first public node = %s with hops = %u.", _host.name().c_str(), _hops);
-				return tick(notify);
+				_tries = 0;
+
+				if (pingResult.statusCode == 0)
+				{
+					_statusString = formatString("Found target node %s with hops = %u.",
+						pingResult.responder.name().c_str(), _hops);
+
+					log(" [==+] %s", _statusString.c_str());
+
+					_host = pingResult.responder;
+					_tick = &PingMonitor::ping;
+					
+					return tick(notify);
+				}
+				else if (pingResult.responder.isPublicAddress()
+					&& pingResult.statusCode == IP_TTL_EXPIRED_TRANSIT)
+				{
+					_statusString = formatString("Found candidate %s with hops = %u.", 
+						pingResult.responder.name().c_str(), _hops);
+
+					log(" [=++] %s", _statusString.c_str());
+
+					_pendingRequests.push_back(asyncIcmpPing(pingResult.responder,
+						static_cast<DWORD>(_timeout.count()), _hops, notify));
+				}
+				else
+				{
+					_statusString = formatString("Node %s with hops = %u not suitable. (%s)",
+						pingResult.responder.name().c_str(), _hops, pingResult.responder.isPublicAddress() ? 
+						pingResult.statusString.c_str() : "Not public.");
+
+					log(" [=++] %s", _statusString.c_str());
+
+					++_hops;
+				}
 			}
 			else
 			{
-				log(" [=++] Searching for first public node, answer from = %s with hops = %u.", 
-					pingResult.responder.name().c_str(), _hops);
-			}
+				_statusString = formatString("%s with hops = %u.", pingResult.statusString.c_str(), _hops);
+				log(" [=++] %s", _statusString.c_str());
 
-			++_hops;
+				if (++_tries == 4)
+				{
+					_tries = 0;
+					++_hops;
+				}
+			}
 		}
 
 		if (_pendingRequests.size() == 0)
@@ -185,41 +229,64 @@ private:
 	{
 		using namespace std::chrono;
 
-		if (_pendingRequests.size() > 0 && _pendingRequests.back().valid())
+		if (_pendingRequests.size() > 0 && 
+			_pendingRequests.back().wait_for(seconds(0)) == std::future_status::ready)
 		{
 			auto pingResult = _pendingRequests.back().get();
 			_pendingRequests.pop_back();
 
-			if (pingResult.responder == _host)
+			if (pingResult.errorCode == 0)
 			{
-				_host = pingResult.responder;
-				_tick = &PingMonitor::ping;
-				log(" [==+] Found number of hops = %u to node = %s.", _hops, _host.name().c_str());
-				return tick(notify);
+				_tries = 0;
+
+				if (pingResult.responder == _host && pingResult.statusCode == 0)
+				{
+					_statusString = formatString("Response from target node with hops = %u.", _hops);
+					log(" [==+] %s", _statusString.c_str());
+
+					_host = pingResult.responder;
+					_tick = &PingMonitor::ping;
+
+					return tick(notify);
+				}
+				else
+				{
+					_statusString = formatString("Response from %s with hops = %u: %s",
+						pingResult.responder.name().c_str(), _hops, pingResult.statusString.c_str());
+
+					log(" [=++] %s", _statusString.c_str());
+
+					_hops += pingResult.statusCode == IP_TTL_EXPIRED_TRANSIT;
+				}
 			}
 			else
 			{
-				log(" [=++] Searching for number of hops, answer from = %s with hops = %u.", 
-					pingResult.responder.name().c_str(), _hops);
-			}
+				_statusString = pingResult.statusString;
+				log(" [=++] %s", _statusString.c_str());
 
-			++_hops;
+				if (++_tries == 4)
+				{
+					_tries = 0;
+					++_hops;
+				}
+			}
 		}
 
 		if (_pendingRequests.size() == 0)
 		{
-			_pendingRequests.push_back(asyncIcmpPing(_traceTargetServer, 
+			_pendingRequests.push_back(asyncIcmpPing(_host,
 				static_cast<DWORD>(_timeout.count()), _hops, notify));
 		}
 
-		return steady_clock::now() + milliseconds(1000);
+		return steady_clock::now() + milliseconds(500);
 	}
 
 	std::chrono::steady_clock::time_point ping(std::function<void()> notify)
 	{
 		using namespace std::chrono;
 
-		while (_pendingRequests.size() > 0 && _pendingRequests.back().valid())
+		while (_pendingRequests.size() > 0 
+			&& _pendingRequests.back().wait_for(seconds(0)) == std::future_status::ready)
 		{
 			auto pingResult = _pendingRequests.back().get();
 			_pendingRequests.pop_back();
@@ -252,14 +319,13 @@ private:
 
 	void processPingResult(IcmpPingResult pingResult)
 	{
-		_statusString = pingResult.errorCode != 0 ? 
-			std::move(pingResult.errorString) : 
-			formatString("Pinging %s over %u %s", pingResult.responder.name().c_str(), _hops, _hops == 1 ? "hop" : "hops");
+		_statusString = pingResult.errorCode != 0 || pingResult.statusCode != 0 ? std::move(pingResult.statusString) :
+			formatString("Pinging %s over %u %s.", pingResult.responder.name().c_str(), _hops, _hops == 1 ? "hop" : "hops");
 
-		_samples.push_back(PingSample{pingResult.errorCode, pingResult.sentTime});
+		auto& sample = *pushSampleSorted(PingSample{ pingResult.errorCode, pingResult.sentTime });
 
 		// Nanoseconds (int64) to milliseconds (double)
-		_samples.back().roundtripTime = pingResult.roundtripTime.count() * 0.000001;
+		sample.roundtripTime = pingResult.roundtripTime.count() * 0.000001;
 
 		{ // Calculate average round trip time
 			std::uint32_t nSuccessfulPings = 0;
@@ -274,7 +340,7 @@ private:
 				}
 			});
 
-			_samples.back().roundtripTimeMean = nSuccessfulPings > 0 ? sum / nSuccessfulPings : -1.0;
+			sample.roundtripTimeMean = nSuccessfulPings > 0 ? sum / nSuccessfulPings : -1.0;
 		}
 
 		{ // Calculate jitter
@@ -305,7 +371,7 @@ private:
 					}
 				});
 
-				_samples.back().roundtripTimeJitter = std::sqrt(squaredDistances / nSuccessfulPings);
+				sample.roundtripTimeJitter = std::sqrt(squaredDistances / nSuccessfulPings);
 			}
 		}
 
@@ -320,7 +386,7 @@ private:
 			});
 
 			// Check if 0
-			_samples.back().lossPercentage = 100.0 * nLostPackets / nSamples;
+			sample.lossPercentage = 100.0 * nLostPackets / nSamples;
 		}
 
 		if (_samples.size() >= 4096)
@@ -328,10 +394,21 @@ private:
 			_samples = decltype(_samples)(_samples.begin() + 2048, _samples.end());
 		}
 
-		log(" [=++] Latency = %f ms, Mean = %f ms, Jitter = %f ms, Loss = %f%%. (%s)", 
+		log(" [=++] Latency = %f ms, Mean = %f ms, Jitter = %f ms, Loss = %f%%. %s", 
 			_samples.back().roundtripTime, _samples.back().roundtripTimeMean, 
 			_samples.back().roundtripTimeJitter, _samples.back().lossPercentage, 
-			pingResult.errorCode == 0 ? "+" : _statusString.c_str());
+			pingResult.errorCode == 0 && pingResult.statusCode == 0 ? "" : pingResult.statusString.c_str());
+	}
+
+	decltype(_samples)::iterator pushSampleSorted(PingSample sample)
+	{
+		auto insertionPoint = std::upper_bound(_samples.begin(), _samples.end(), sample, 
+			[](const PingSample& lhs, const PingSample& rhs)
+		{
+			return lhs.sentTime < rhs.sentTime;
+		});
+
+		return _samples.insert(insertionPoint, std::move(sample));
 	}
 
 	template <std::size_t N, typename... Args>
@@ -346,14 +423,14 @@ private:
 		}
 	}
 
-	static std::string ipErrorString(const char* functionName, DWORD errorCode = GetLastError())
+	static std::string ipStatusString(DWORD errorCode)
 	{
 		wchar_t buffer[0x1000];
 		DWORD size = sizeof buffer * sizeof *buffer;
 
 		GetIpErrorString(errorCode, buffer, &size);
 
-		return std::string(functionName) + " failed (" + std::to_string(errorCode) + "): " + toUtf8(buffer);
+		return toUtf8(buffer) + '(' + std::to_string(errorCode) + ')';
 	}
 
 	static std::future<IcmpPingResult> asyncIcmpPing(IpEndPoint host, DWORD timeout, UCHAR ttl, std::function<void()> notify)
@@ -371,17 +448,14 @@ private:
 			options.Ttl = ttl;
 
 			result.sentTime = steady_clock::now();
-			auto ret = IcmpSendEcho(icmpFile.get(), host4, nullptr, 0, &options, &reply, sizeof reply, timeout);
-
-			// Subtracting 0.2 ms because of call overhead, while not allowing values below 0.01 ms.
-			result.roundtripTime = std::max(nanoseconds(1000), steady_clock::now() - result.sentTime - microseconds(200));
+			IcmpSendEcho(icmpFile.get(), host4, nullptr, 0, &options, &reply, sizeof reply, timeout);
+			auto receiveTime = steady_clock::now();
+			result.errorCode = GetLastError();
+			result.statusCode = reply.Status;
+			result.statusString = ipStatusString(result.errorCode == 0 ? reply.Status : result.errorCode);
 			result.responder = IpEndPoint(reply.Address);
-
-			if (ret == 0)
-			{ // Error
-				result.errorCode = GetLastError();
-				result.errorString = ipErrorString("IcmpSendEcho");
-			}
+			result.roundtripTime = std::max(nanoseconds(1000), receiveTime - result.sentTime - microseconds(200));
+			// Subtracting 0.2 ms because of call overhead, while not allowing values below 0.01 ms.
 
 			notify();
 
