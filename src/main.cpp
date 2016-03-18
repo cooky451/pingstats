@@ -12,109 +12,127 @@
 
 LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
-	auto mainWindow = reinterpret_cast<MainWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
-
-	switch (message)
+#if defined _WIN64
+	try // Exceptions get propagated on 32-bit executables.
+#endif
 	{
-	default:
-	{} break;
+		auto mainWindow = reinterpret_cast<MainWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 
-	case WM_CREATE:
-	{
-		mainWindow = new MainWindow(hwnd);
-		SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(mainWindow));
-
-		mainWindow->resizeWindowToDefaultSize(hwnd);
-	}	return 0;
-
-	case WM_CLOSE:
-	{
-		ShowWindow(hwnd, SW_HIDE);
-		delete mainWindow;
-		DestroyWindow(hwnd);
-		PostQuitMessage(0);
-	}	return 0;
-
-	case WM_PAINT:
-	{
-		mainWindow->drawWindow(hwnd);
-	}	return 0;
-
-	case WM_ERASEBKGND:
-	{}	return 1;
-
-	case WM_SIZE:
-	{
-		mainWindow->resizeNotify();
-	}	return 0;
-
-	case WM_LBUTTONDBLCLK:
-	{
-		mainWindow->resizeWindowToDefaultSize(hwnd);
-	}	return 0;
-
-	case WM_SYSCOMMAND:
-	{
-		switch (wparam)
+		switch (message)
 		{
 		default:
-		{}	break;
+		{} break;
 
-		case SC_MINIMIZE:
+		case WM_CREATE:
+		{
+			mainWindow = new MainWindow(hwnd);
+			SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(mainWindow));
+
+			mainWindow->resizeWindowToDefaultSize(hwnd);
+		}	return 0;
+
+		case WM_CLOSE:
 		{
 			ShowWindow(hwnd, SW_HIDE);
-		} return 0;
-		}
-	}	break;
+			delete mainWindow;
+			DestroyWindow(hwnd);
+			PostQuitMessage(0);
+		}	return 0;
 
-	case WM_NOTIFICATIONICON:
-	{
-		if (wparam == 0)
+		case WM_PAINT:
 		{
-			switch (lparam)
+			mainWindow->drawWindow(hwnd);
+		}	return 0;
+
+		case WM_ERASEBKGND:
+		{}	return 1;
+
+		case WM_SIZE:
+		{
+			mainWindow->resizeNotify();
+		}	return 0;
+
+		case WM_LBUTTONDBLCLK:
+		{
+			mainWindow->resizeWindowToDefaultSize(hwnd);
+		}	return 0;
+
+		case WM_SYSCOMMAND:
+		{
+			switch (wparam)
 			{
 			default:
 			{}	break;
 
-			case WM_RBUTTONDOWN:
+			case SC_MINIMIZE:
 			{
-				POINT p;
-				GetCursorPos(&p);
+				ShowWindow(hwnd, SW_HIDE);
+			} return 0;
+			}
+		}	break;
 
-				auto hmenu = LoadMenuW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(TRAY_MENU));
-				auto htrack = GetSubMenu(hmenu, 0);
-
-				switch (TrackPopupMenu(htrack, TPM_RIGHTALIGN | TPM_RETURNCMD, p.x, p.y, 0, hwnd, nullptr))
+		case WM_NOTIFICATIONICON:
+		{
+			if (wparam == 0)
+			{
+				switch (lparam)
 				{
 				default:
-					break;
+				{}	break;
 
-				case TRAY_MENU_SHOW:
-					ShowWindow(hwnd, SW_SHOW);
-					return 0;
-
-				case TRAY_MENU_CLOSE:
-					PostMessageW(hwnd, WM_CLOSE, 0, 0);
-					return 0;
-				}
-			}	break;
-
-			case WM_LBUTTONDBLCLK:
-			{
-				if (IsWindowVisible(hwnd))
+				case WM_RBUTTONDOWN:
 				{
-					ShowWindow(hwnd, SW_HIDE);
-				}
-				else
+					POINT p;
+					GetCursorPos(&p);
+
+					auto hmenu = LoadMenuW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(TRAY_MENU));
+					auto htrack = GetSubMenu(hmenu, 0);
+
+					switch (TrackPopupMenu(htrack, TPM_RIGHTALIGN | TPM_RETURNCMD, p.x, p.y, 0, hwnd, nullptr))
+					{
+					default:
+						break;
+
+					case TRAY_MENU_SHOW:
+						ShowWindow(hwnd, SW_SHOW);
+						return 0;
+
+					case TRAY_MENU_CLOSE:
+						PostMessageW(hwnd, WM_CLOSE, 0, 0);
+						return 0;
+					}
+				}	break;
+
+				case WM_LBUTTONDBLCLK:
 				{
-					PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-					ShowWindow(hwnd, SW_SHOW);
+					if (IsWindowVisible(hwnd))
+					{
+						ShowWindow(hwnd, SW_HIDE);
+					}
+					else
+					{
+						PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+						ShowWindow(hwnd, SW_SHOW);
+					}
+				}	return 0;
 				}
-			}	return 0;
 			}
+		}	break;
 		}
-	}	break;
 	}
+#if defined _WIN64
+	catch (std::exception& e)
+	{
+		showMessageBox("Fatal Error", e.what());
+		PostMessageW(hwnd, WM_CLOSE, 0, 0);
+	}
+	catch (...)
+	{
+		showMessageBox("Fatal Error", "Fatal Error");
+		PostMessageW(hwnd, WM_CLOSE, 0, 0);
+	}
+
+#endif
 
 	return DefWindowProcW(hwnd, message, wparam, lparam);
 }
@@ -189,6 +207,10 @@ int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE, LPWSTR, int show)
 	catch (std::exception& e)
 	{
 		showMessageBox("Fatal Error", e.what());
+	}
+	catch (...)
+	{
+		showMessageBox("Fatal Error", "Fatal Error");
 	}
 
 	return 0;

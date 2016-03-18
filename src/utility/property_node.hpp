@@ -39,17 +39,12 @@ public:
 		triggerSave();
 	}
 
-	PropertyNode(PropertyNode* parent, std::string name, const char* textToParse = nullptr)
+	PropertyNode& operator = (PropertyNode&&) = delete;
+
+	PropertyNode(PropertyNode* parent, std::string name)
 		: _parent(parent)
 		, _name(std::move(name))
-	{
-		parse(textToParse);
-	}
-
-	PropertyNode(const PropertyNode&) = delete;
-	PropertyNode(PropertyNode&&) = delete;
-	PropertyNode& operator = (const PropertyNode&) = delete;
-	PropertyNode& operator = (PropertyNode&&) = delete;
+	{}
 
 	PropertyNode* parent()
 	{
@@ -177,7 +172,17 @@ public:
 		return node;
 	}
 
-	void parse(const char*& begin)
+	bool parse(const std::string& s)
+	{
+		return parse(s.c_str());
+	}
+
+	bool parse(const char* s)
+	{
+		return parseDirect(s);
+	}
+
+	bool parseDirect(const char*& begin)
 	{
 		const auto skipUntil = [](const char* s, char until) { while (*s != '\0' && *s != until) ++s; return s; };
 		const auto skipSpaces = [](const char* s) { while (std::isspace(*s)) ++s; return s; };
@@ -208,7 +213,7 @@ public:
 			if (*begin == '{')
 			{
 				auto child = std::make_unique<PropertyNode>(this, std::string(nameBegin, nameEnd));
-				child->parse(++begin);
+				child->parseDirect(++begin);
 
 				if (*begin == '}')
 				{
@@ -218,8 +223,10 @@ public:
 				}
 			}
 
-			throw std::runtime_error("Unexpected symbol or end while parsing property node.");
+			return false;
 		}
+
+		return true;
 	}
 
 	void save(std::ostream& file, std::uint16_t indentation = 0) const
@@ -261,26 +268,6 @@ public:
 			indent(file) << "}\n";
 			indent(file) << '\n';
 		}
-	}
-
-	static std::unique_ptr<PropertyNode> makeAndLinkWithFile(std::string filename, std::string name = "root")
-	{
-		using namespace std::experimental;
-
-		std::string s;
-		std::error_code ec;
-		std::ifstream file(filename, std::ifstream::binary);
-		auto size = filesystem::file_size(filename, ec);
-
-		if (!ec)
-		{
-			s.resize(std::size_t(size));
-			file.read(const_cast<char*>(s.data()), s.size());
-		}
-
-		auto node = std::make_unique<PropertyNode>(nullptr, std::move(name), s.c_str());
-		node->setSaveOnDestruct(std::move(filename));
-		return node;
 	}
 };
 

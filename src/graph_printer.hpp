@@ -78,7 +78,7 @@ private:
 	std::uint64_t _frameCounter = 0;
 	const double _bottomBorder = 64.0;
 
-	std::uint16_t _penThickness = ANTI_ALIASING;
+	std::uint16_t _penThickness = ANTI_ALIASING + ANTI_ALIASING / 2;
 	std::uint16_t _drawDelayMs = 500;
 	bool _alwaysRedraw = false;
 
@@ -113,6 +113,8 @@ public:
 		cancelSleep();
 	}
 
+	GraphPrinter& operator = (GraphPrinter&&) = delete;
+
 	GraphPrinter(HWND windowHandle)
 		: _windowHandle(windowHandle)
 		, _windowDeviceContext(GetDC(windowHandle))
@@ -120,7 +122,18 @@ public:
 		, _backBuffer(std::make_unique<MemoryCanvas>(_windowDeviceContext, 0, 0))
 		, _highResBackBuffer(std::make_unique<MemoryCanvas>(_windowDeviceContext, 0, 0))
 	{
-		auto config = PropertyNode::makeAndLinkWithFile("ipstats.cfg");
+		auto configFileName = "pingstats.cfg";
+		auto configFile = readFileBinaryAsString(configFileName);
+		auto config = std::make_unique<PropertyNode>(nullptr, "root");
+
+		if (config->parse(configFile))
+		{
+			config->setSaveOnDestruct(std::move(configFileName));
+		}
+		else
+		{
+			showMessageBox("Warning", "Error while parsing property node.");
+		}
 
 		config->loadOrStore("Graph.PenThickness", _penThickness);
 		config->loadOrStore("Timing.DrawDelay", _drawDelayMs);
@@ -143,10 +156,10 @@ public:
 				host->loadOrStore("Timing.Delay", _pingMonitors.back().delayMs);
 				host->loadOrStore("Timing.Timeout", _pingMonitors.back().timeoutMs);
 				host->loadOrStore("Timing.Async", _pingMonitors.back().async);
-				host->loadOrStore("Graph.DrawMeanGraph", _pingMonitors.back().drawMeanGraph);
-				host->loadOrStore("Graph.DrawJitterGraph", _pingMonitors.back().drawJitterGraph);
-				host->loadOrStore("Graph.DrawLossGraph", _pingMonitors.back().drawLossGraph);
-				host->loadOrStore("Graph.PixelPerSecond", _pingMonitors.back().pixelPerSecond);
+				host->loadOrStore("Graph.DrawMean", _pingMonitors.back().drawMeanGraph);
+				host->loadOrStore("Graph.DrawJitter", _pingMonitors.back().drawJitterGraph);
+				host->loadOrStore("Graph.DrawLoss", _pingMonitors.back().drawLossGraph);
+				host->loadOrStore("Graph.PixelsPerSecond", _pingMonitors.back().pixelPerSecond);
 			}
 		}
 
@@ -154,13 +167,21 @@ public:
 		AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, false);
 		_defaultWindowRect = windowRect;
 
-		_backgroundThread = autojoin_thread([this] { backgroundThreadMain(); });
+		_backgroundThread = autojoin_thread([this] { 
+			try
+			{
+				backgroundThreadMain();
+			}
+			catch (std::exception& e)
+			{
+				showMessageBox("Fatal error", e.what());
+			}
+			catch (...)
+			{
+				showMessageBox("Fatal error", "Fatal error in background thread.");
+			}
+		});
 	}
-
-	GraphPrinter(const GraphPrinter&) = delete;
-	GraphPrinter(GraphPrinter&&) = delete;
-	GraphPrinter& operator = (const GraphPrinter&) = delete;
-	GraphPrinter& operator = (GraphPrinter&&) = delete;
 
 	void forceRedraw()
 	{
@@ -483,8 +504,8 @@ private:
 			{
 				std::uint_fast32_t p0 = source[iTimesWidth + 0 + j + 0];
 				std::uint_fast32_t p1 = source[iTimesWidth + 0 + j + 1];
-				std::uint_fast32_t p2 = source[iTimesWidth + 1 + j + 0];
-				std::uint_fast32_t p3 = source[iTimesWidth + 1 + j + 1];
+				std::uint_fast32_t p2 = source[iTimesWidth + scaledWidth + j + 0];
+				std::uint_fast32_t p3 = source[iTimesWidth + scaledWidth + j + 1];
 
 				std::uint_fast16_t p0_r = (p0 >> 16) & 0xFF;
 				std::uint_fast16_t p0_g = (p0 >> 8) & 0xFF;
