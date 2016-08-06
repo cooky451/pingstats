@@ -29,6 +29,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
 			SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(mainWindow));
 
 			mainWindow->resizeWindowToDefaultSize(hwnd);
+			mainWindow->setTopmostIfConfigured(hwnd);
 		}	return 0;
 
 		case WM_CLOSE:
@@ -55,6 +56,7 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
 		case WM_LBUTTONDBLCLK:
 		{
 			mainWindow->resizeWindowToDefaultSize(hwnd);
+			mainWindow->setTopmostIfConfigured(hwnd);
 		}	return 0;
 
 		case WM_SYSCOMMAND:

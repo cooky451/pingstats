@@ -1,6 +1,7 @@
 #pragma once
 
 #include "graph_printer.hpp"
+#include "pingstats_config.h"
 #include "resource.h"
 
 #include <cmath>
@@ -8,6 +9,7 @@
 #include <atomic>
 #include <deque>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -16,14 +18,22 @@
 class MainWindow
 {
 	NotifyIcon _notifyIcon;
+	std::unique_ptr<PingstatsConfig> _psConfig;
 	GraphPrinter _graphPrinter;
 	std::chrono::steady_clock::time_point _lastForcedRedraw;
+
+	bool _topmost = false;
 
 public:
 	MainWindow(HWND windowHandle)
 		: _notifyIcon(windowHandle, WM_NOTIFICATIONICON, MAKEINTRESOURCEW(ICON_DEFAULT))
-		, _graphPrinter(windowHandle)
-	{}
+		, _psConfig(std::make_unique<PingstatsConfig>("pingstats.cfg"))
+		, _graphPrinter(windowHandle, _psConfig->get())
+	{
+		(*_psConfig)->loadOrStore("Window.Topmost", _topmost);
+
+		_psConfig.reset(); // Config no longer required, so save it to disk
+	}
 
 	void resizeWindowToDefaultSize(HWND hwnd)
 	{
@@ -41,6 +51,15 @@ public:
 		const auto y = std::max(0l, centerY - defaultHeight / 2);
 		SetWindowPos(hwnd, HWND_TOP, x, y, defaultWidth, defaultHeight, SWP_SHOWWINDOW);
 		_graphPrinter.resetBackBufferSize();
+	}
+
+	void setTopmostIfConfigured(HWND hwnd)
+	{
+		if (_topmost)
+		{
+			SetWindowLongPtr(hwnd, GWL_EXSTYLE, GetWindowLongPtr(hwnd, GWL_EXSTYLE) | WS_EX_TOPMOST);
+			SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+		}
 	}
 
 	void drawWindow(HWND hwnd)

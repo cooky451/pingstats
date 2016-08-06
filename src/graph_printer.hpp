@@ -115,26 +115,13 @@ public:
 
 	GraphPrinter& operator = (GraphPrinter&&) = delete;
 
-	GraphPrinter(HWND windowHandle)
+	GraphPrinter(HWND windowHandle, PropertyNode* config)
 		: _windowHandle(windowHandle)
 		, _windowDeviceContext(GetDC(windowHandle))
 		, _frontBuffer(std::make_unique<MemoryCanvas>(_windowDeviceContext, 0, 0))
 		, _backBuffer(std::make_unique<MemoryCanvas>(_windowDeviceContext, 0, 0))
 		, _highResBackBuffer(std::make_unique<MemoryCanvas>(_windowDeviceContext, 0, 0))
 	{
-		auto configFileName = "pingstats.cfg";
-		auto configFile = readFileBinaryAsString(configFileName);
-		auto config = std::make_unique<PropertyNode>(nullptr, "root");
-
-		if (config->parse(configFile))
-		{
-			config->setSaveOnDestruct(std::move(configFileName));
-		}
-		else
-		{
-			showMessageBox("Warning", "Error while parsing property node.");
-		}
-
 		config->loadOrStore("Graph.PenThickness", _penThickness);
 		config->loadOrStore("Timing.DrawDelay", _drawDelayMs);
 		config->loadOrStore("Timing.AlwaysRedraw", _alwaysRedraw);
