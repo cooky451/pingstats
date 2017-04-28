@@ -4,63 +4,69 @@
 #include <condition_variable>
 #include <mutex>
 
-class WaitableFlag
+namespace utility // export
 {
-	mutable std::mutex _m;
-	mutable std::condition_variable _cv;
-	std::atomic_bool _flag;
-
-public:
-	WaitableFlag(bool set = false)
-		: _flag(set)
-	{}
-
-	bool isSet() const
+	class WaitableFlag
 	{
-		return _flag;
-	}
+		mutable std::mutex _mutex;
+		mutable std::condition_variable _conditionVariable;
+		std::atomic_bool _flag; // atomic so we don't need to lock for isSet()
 
-	void set()
-	{
-		{	// Still need lock because we don't want
-			// _flag to be modified between checking
-			// the predicate and blocking the thread
-			// in wait(), waitFor() and waitUntil().
-			auto lock = makeLock();
-			_flag = true;
+		// set() and reset() still need to lock because
+		// we don't want _flag to be modified between
+		// checking the predicate and blocking the thread
+		// in wait(), waitFor() and waitUntil().
+
+	public:
+		WaitableFlag(bool set = false)
+			: _flag(set)
+		{}
+
+		auto isSet() const
+		{
+			return _flag.load();
 		}
-		_cv.notify_all();
-	}
 
-	void reset()
-	{
-		auto lock = makeLock();
-		_flag = false;
-	}
+		void set()
+		{
+			{	
+				auto lock = makeLock();
+				_flag = true;
+			}
 
-	void wait() const
-	{
-		auto lock = makeLock();
-		_cv.wait(lock, [this] { return isSet(); });
-	}
+			_conditionVariable.notify_all();
+		}
 
-	template <typename Rep, typename Period>
-	bool waitFor(const std::chrono::duration<Rep, Period>& relativeTime) const
-	{
-		auto lock = makeLock();
-		return _cv.wait_for(lock, relativeTime, [this] { return isSet(); });
-	}
+		void reset()
+		{
+			auto lock = makeLock();
+			_flag = false;
+		}
 
-	template <typename Clock, typename Duration>
-	bool waitUntil(const std::chrono::time_point<Clock, Duration>& timeoutTime) const
-	{
-		auto lock = makeLock();
-		return _cv.wait_until(lock, timeoutTime, [this] { return isSet(); });
-	}
+		void wait() const
+		{
+			auto lock = makeLock();
+			_conditionVariable.wait(lock, [this] { return isSet(); });
+		}
 
-private:
-	std::unique_lock<std::mutex> makeLock() const
-	{
-		return std::unique_lock<std::mutex>(_m);
-	}
-};
+		template <typename Rep, typename Period>
+		bool waitFor(const std::chrono::duration<Rep, Period>& relativeTime) const
+		{
+			auto lock = makeLock();
+			return _conditionVariable.wait_for(lock, relativeTime, [this] { return isSet(); });
+		}
+
+		template <typename Clock, typename Duration>
+		bool waitUntil(const std::chrono::time_point<Clock, Duration>& timeoutTime) const
+		{
+			auto lock = makeLock();
+			return _conditionVariable.wait_until(lock, timeoutTime, [this] { return isSet(); });
+		}
+
+	private:
+		std::unique_lock<std::mutex> makeLock() const
+		{
+			return std::unique_lock<std::mutex>(_mutex);
+		}
+	};
+}

@@ -6,3 +6,11 @@
 *.idb
 *.res
 /bin/
+*.suo
+*.db
+*.ipch
+*.obj
+*.log
+*.pdb
+*.filters
+*.user

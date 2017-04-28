@@ -2,97 +2,71 @@
 
 #include <thread>
 
-template <typename DestructionPolicy>
-class scoped_thread
+namespace utility // export
 {
-public:
-	typedef std::thread::native_handle_type native_handle_type;
-	typedef std::thread::id id;
-
-private:
-	std::thread thr_;
-
-public:
-	~scoped_thread()
+	template <typename DestructionPolicy>
+	class ScopedThread
 	{
-		DestructionPolicy()(thr_);
-	}
+		std::thread _thread;
 
-	scoped_thread() noexcept
-	{}
+	public:
+		~ScopedThread()
+		{
+			DestructionPolicy()(_thread);
+		}
 
-	template <typename Function, typename... Args>
-	explicit scoped_thread(Function&& f, Args&&... args)
-		: thr_(std::forward<Function>(f), std::forward<Args>(args)...)
-	{}
+		ScopedThread(ScopedThread&& other)
+			: _thread(std::move(other._thread))
+		{}
 
-	scoped_thread(const scoped_thread&) = delete;
+		ScopedThread& operator = (ScopedThread&& other)
+		{
+			_thread = std::move(other._thread);
+			return *this;
+		}
 
-	scoped_thread(scoped_thread&& other) noexcept
-		: thr_(std::move(other.thr_))
-	{}
+		ScopedThread(std::thread&& thr = std::thread())
+			: _thread(std::move(thr))
+		{}
 
-	scoped_thread& operator = (const scoped_thread&) = delete;
+		auto& get()
+		{
+			return _thread;
+		}
 
-	scoped_thread& operator = (scoped_thread&& other) noexcept
+		auto& get() const
+		{
+			return _thread;
+		}
+
+		auto release()
+		{
+			return std::move(_thread);
+		}
+	};
+
+	struct ScopedThreadAutoJoinPolicy
 	{
-		thr_ = std::move(other.thr_);
-		return *this;
-	}
+		void operator () (std::thread& thr) const
+		{
+			if (thr.joinable())
+			{
+				thr.join();
+			}
+		}
+	};
 
-	void swap(scoped_thread& other) noexcept
+	struct ScopedThreadAutoDetachPolicy
 	{
-		thr_.swap(other.thr_);
-	}
+		void operator () (std::thread& thr) const
+		{
+			if (thr.joinable())
+			{
+				thr.detach();
+			}
+		}
+	};
 
-	bool joinable() const noexcept
-	{
-		return thr_.joinable();
-	}
-
-	void join()
-	{
-		thr_.join();
-	}
-
-	void detach()
-	{
-		thr_.detach();
-	}
-
-	id get_id() const noexcept
-	{
-		return thr_.get_id();
-	}
-
-	native_handle_type native_handle()
-	{
-		return thr_.native_handle();
-	}
-
-	static unsigned hardware_concurrency() noexcept
-	{
-		return std::thread::hardware_concurrency();
-	}
-};
-
-struct thread_join_if_joinable_policy
-{
-	void operator () (std::thread& thr) const
-	{
-		if (thr.joinable())
-			thr.join();
-	}
-};
-
-struct thread_detach_if_joinable_policy
-{
-	void operator () (std::thread& thr) const
-	{
-		if (thr.joinable())
-			thr.detach();
-	}
-};
-
-typedef scoped_thread<thread_join_if_joinable_policy> autojoin_thread;
-typedef scoped_thread<thread_detach_if_joinable_policy> autodetach_thread;
+	using AutojoinThread = ScopedThread<ScopedThreadAutoJoinPolicy>;
+	using AutodetachThread = ScopedThread<ScopedThreadAutoDetachPolicy>;
+}

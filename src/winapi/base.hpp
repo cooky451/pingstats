@@ -5,7 +5,8 @@
 	processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 #define NOMINMAX
-#define _CRT_SECURE_NO_WARNINGS
-#define _SCL_SECURE_NO_WARNINGS
+
+#pragma comment(lib, "Comctl32.lib")
 
 #include <Windows.h>
+#include <windowsx.h>
