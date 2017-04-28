@@ -127,7 +127,7 @@ int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE, LPWSTR, int show) try
 	IcmpFileHandle icmpDummy{ IcmpCreateFile() };
 
 	static constexpr wchar_t WND_CLASSNAME[]{ L"MainWindowClass" };
-	static constexpr wchar_t WND_TITLE[]{ L"pingstats v1.0.0" };
+	static constexpr wchar_t WND_TITLE[]{ L"pingstats v2.0.0" };
 
 	WNDCLASSEXW windowClassEx{};
 	windowClassEx.cbClsExtra = 0;
