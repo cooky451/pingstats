@@ -1,22 +1,46 @@
 /* 
  * 
+ * 
  */
 
-#pragma comment(lib, "Ws2_32.lib")
-#pragma comment(lib, "Iphlpapi.lib")
-
-#include "windows/utility.hpp"
+#include "canvas_drawing.hpp"
+#include "utility/utility.hpp"
+#include "winapi/utility.hpp"
 #include "main_window.hpp"
 
 #include <memory>
 
-LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
+#pragma comment(lib, "Winmm.lib") // timeBeginPeriod
+
+using namespace std;
+using namespace utility;
+using namespace winapi;
+using namespace pingstats;
+
+namespace
 {
-#if defined _WIN64
-	try // Exceptions get propagated on 32-bit executables.
-#endif
+	class TimePeriod
 	{
-		auto mainWindow = reinterpret_cast<MainWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+		UINT _period;
+
+	public:
+		~TimePeriod()
+		{
+			timeEndPeriod(_period);
+		}
+
+		TimePeriod(UINT period)
+			: _period{ period }
+		{
+			timeBeginPeriod(_period);
+		}
+
+		TimePeriod(TimePeriod&&) = delete;
+	};
+
+	LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) try
+	{
+		auto window{ reinterpret_cast<MainWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA)) };
 
 		switch (message)
 		{
@@ -25,193 +49,138 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
 
 		case WM_CREATE:
 		{
-			mainWindow = new MainWindow(hwnd);
-			SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(mainWindow));
-
-			mainWindow->resizeWindowToDefaultSize(hwnd);
+			SetWindowLongPtrW(hwnd, GWLP_USERDATA, 
+				reinterpret_cast<LONG_PTR>(new MainWindow(hwnd)));
 		}	return 0;
+		}
 
-		case WM_CLOSE:
+		if (window != nullptr)
 		{
-			ShowWindow(hwnd, SW_HIDE);
-			delete mainWindow;
-			DestroyWindow(hwnd);
-			PostQuitMessage(0);
-		}	return 0;
+			const auto result{ window->handleMessage(hwnd, message, wparam, lparam) };
 
-		case WM_PAINT:
-		{
-			mainWindow->drawWindow(hwnd);
-		}	return 0;
-
-		case WM_ERASEBKGND:
-		{}	return 1;
-
-		case WM_SIZE:
-		{
-			mainWindow->resizeNotify();
-		}	return 0;
-
-		case WM_LBUTTONDBLCLK:
-		{
-			mainWindow->resizeWindowToDefaultSize(hwnd);
-		}	return 0;
-
-		case WM_SYSCOMMAND:
-		{
-			switch (wparam)
+			if (result.destroy)
 			{
-			default:
-			{}	break;
+				DestroyWindow(hwnd);
 
-			case SC_MINIMIZE:
-			{
-				ShowWindow(hwnd, SW_HIDE);
-			} return 0;
-			}
-		}	break;
+				delete window;
 
-		case WM_NOTIFICATIONICON:
-		{
-			if (wparam == 0)
-			{
-				switch (lparam)
+				if (result.quit)
 				{
-				default:
-				{}	break;
-
-				case WM_RBUTTONDOWN:
-				{
-					POINT p;
-					GetCursorPos(&p);
-
-					auto hmenu = LoadMenuW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(TRAY_MENU));
-					auto htrack = GetSubMenu(hmenu, 0);
-
-					switch (TrackPopupMenu(htrack, TPM_RIGHTALIGN | TPM_RETURNCMD, p.x, p.y, 0, hwnd, nullptr))
-					{
-					default:
-						break;
-
-					case TRAY_MENU_SHOW:
-						ShowWindow(hwnd, SW_SHOW);
-						return 0;
-
-					case TRAY_MENU_CLOSE:
-						PostMessageW(hwnd, WM_CLOSE, 0, 0);
-						return 0;
-					}
-				}	break;
-
-				case WM_LBUTTONDBLCLK:
-				{
-					if (IsWindowVisible(hwnd))
-					{
-						ShowWindow(hwnd, SW_HIDE);
-					}
-					else
-					{
-						PostMessageW(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-						ShowWindow(hwnd, SW_SHOW);
-					}
-				}	return 0;
+					PostQuitMessage(0);
 				}
 			}
-		}	break;
-		}
-	}
-#if defined _WIN64
-	catch (std::exception& e)
-	{
-		showMessageBox("Fatal Error", e.what());
-		PostMessageW(hwnd, WM_CLOSE, 0, 0);
-	}
-	catch (...)
-	{
-		showMessageBox("Fatal Error", "Fatal Error");
-		PostMessageW(hwnd, WM_CLOSE, 0, 0);
-	}
 
-#endif
-
-	return DefWindowProcW(hwnd, message, wparam, lparam);
-}
-
-int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE, LPWSTR, int show)
-{
-	try
-	{
-		auto singleInstanceEventName = L"oNnAOn73JzWwWoCN";
-		auto singleInstanceEvent = HandlePtr(OpenEventW(EVENT_ALL_ACCESS, false, singleInstanceEventName));
-
-		if (singleInstanceEvent != nullptr)
-		{
-			auto decision = showMessageBox("Warning", "There is already an instance "
-				"of pingstats running. Start anyway?", nullptr, MB_OKCANCEL);
-
-			if (decision != IDOK)
+			if (!result.forward)
 			{
-				return 0;
+				return result.result;
 			}
 		}
-		else
-		{
-			singleInstanceEvent.reset(CreateEventW(nullptr, false, false, singleInstanceEventName));
-		}
 
-		const auto windowClassName = L"MainWindowClass";
-		const auto windowTitle = L"Ping Monitor";
-
-		BrushPtr backgroundBrush(CreateSolidBrush(GraphPrinter::DARK_BLUE));
-
-		WNDCLASSEXW windowClassEx = {};
-		windowClassEx.cbClsExtra = 0;
-		windowClassEx.cbSize = sizeof windowClassEx;
-		windowClassEx.cbWndExtra = 0;
-		windowClassEx.hbrBackground = backgroundBrush.get();
-		windowClassEx.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-		windowClassEx.hIcon = LoadIconW(hinstance, MAKEINTRESOURCEW(ICON_DEFAULT));
-		windowClassEx.hIconSm = LoadIconW(hinstance, MAKEINTRESOURCEW(ICON_DEFAULT));
-		windowClassEx.hInstance = hinstance;
-		windowClassEx.lpfnWndProc = windowProc;
-		windowClassEx.lpszClassName = windowClassName;
-		windowClassEx.lpszMenuName = nullptr;
-		windowClassEx.style = CS_OWNDC | CS_DBLCLKS;
-
-		if (!RegisterClassExW(&windowClassEx))
-		{
-			throw WindowsError("RegisterClassEx()");
-		}
-
-		auto hwnd = CreateWindowExW(0, windowClassName, windowTitle, WS_OVERLAPPEDWINDOW,
-			CW_USEDEFAULT, CW_USEDEFAULT, 600, 300, nullptr, nullptr, hinstance, nullptr);
-
-		if (hwnd == nullptr)
-		{
-			throw WindowsError("CreateWindowEx()");
-		}
-
-		ShowWindow(hwnd, show);
-		UpdateWindow(hwnd);
-
-		MSG message;
-
-		while (GetMessageW(&message, nullptr, 0, 0) > 0)
-		{
-			TranslateMessage(&message);
-			DispatchMessageW(&message);
-		}
-
-		return static_cast<int>(message.wParam);
+		return DefWindowProcW(hwnd, message, wparam, lparam);
 	}
 	catch (std::exception& e)
 	{
-		showMessageBox("Fatal Error", e.what());
+		SendMessageW(hwnd, WM_CLOSE, 0, 0);
+		showMessageBox("Error", e.what());
+		return 0;
 	}
 	catch (...)
 	{
-		showMessageBox("Fatal Error", "Fatal Error");
+		SendMessageW(hwnd, WM_CLOSE, 0, 0);
+		showMessageBox("Error", "Unknown error.");
+		return 0;
+	}
+}
+
+int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE, LPWSTR, int show) try
+{
+	static constexpr wchar_t SINGLE_INSTANCE_EVENT_NAME[]{ L"oNnAOn73JzWwWoCN" };
+
+	auto singleInstanceEvent{ HandlePtr{ OpenEventW(
+		EVENT_ALL_ACCESS, false, SINGLE_INSTANCE_EVENT_NAME) } };
+
+	if (singleInstanceEvent != nullptr)
+	{
+		const auto decision{ showMessageBox("Warning", 
+			"There is already an instance "
+			"of pingstats running. Start anyway?", MB_OKCANCEL) };
+
+		if (decision != IDOK)
+		{
+			return 0;
+		}
+	}
+	else
+	{
+		singleInstanceEvent.reset(CreateEventW(
+			nullptr, false, false, SINGLE_INSTANCE_EVENT_NAME));
 	}
 
+	// For debugging.
+	//AllocConsole();
+	//freopen("CONOUT$", "w", stdout);
+
+	// Increases sleep/wait resolution
+	TimePeriod timePeriod{ 1 };
+
+	// Prevents Windows memory leak https://support.microsoft.com/en-us/kb/2384321
+	IcmpFileHandle icmpDummy{ IcmpCreateFile() };
+
+	static constexpr wchar_t WND_CLASSNAME[]{ L"MainWindowClass" };
+	static constexpr wchar_t WND_TITLE[]{ L"pingstats v1.0.0" };
+
+	WNDCLASSEXW windowClassEx{};
+	windowClassEx.cbClsExtra = 0;
+	windowClassEx.cbSize = sizeof windowClassEx;
+	windowClassEx.cbWndExtra = 0;
+	windowClassEx.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+	windowClassEx.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+	windowClassEx.hIcon = LoadIconW(hinstance, MAKEINTRESOURCEW(ICON_DEFAULT));
+	windowClassEx.hIconSm = LoadIconW(hinstance, MAKEINTRESOURCEW(ICON_DEFAULT));
+	windowClassEx.hInstance = hinstance;
+	windowClassEx.lpfnWndProc = windowProc;
+	windowClassEx.lpszClassName = WND_CLASSNAME;
+	windowClassEx.lpszMenuName = nullptr;
+	windowClassEx.style = CS_HREDRAW | CS_VREDRAW;
+
+	if (!RegisterClassExW(&windowClassEx))
+	{
+		throw WindowsError{ "RegisterClassEx()" };
+	}
+
+	const auto hwnd{ CreateWindowExW(
+		0, WND_CLASSNAME, WND_TITLE, 
+		WS_OVERLAPPEDWINDOW,
+		CW_USEDEFAULT, CW_USEDEFAULT, 
+		640, 640, 
+		nullptr, nullptr, 
+		hinstance, nullptr) };
+
+	if (hwnd == nullptr)
+	{
+		throw WindowsError{ "CreateWindowEx()" };
+	}
+
+	ShowWindow(hwnd, show);
+	UpdateWindow(hwnd);
+
+	MSG message;
+
+	while (GetMessageW(&message, nullptr, 0, 0) > 0)
+	{
+		TranslateMessage(&message);
+		DispatchMessageW(&message);
+	}
+
+	return static_cast<int>(message.wParam);
+}
+catch (std::exception& e)
+{
+	showMessageBox("Error", e.what());
+	return 0;
+}
+catch (...)
+{
+	showMessageBox("Error", "Unknown error.");
 	return 0;
 }
