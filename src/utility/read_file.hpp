@@ -23,73 +23,50 @@
 
 #pragma once
 
-#include <thread>
+#include <cstdio>
+
+#include <memory>
+#include <filesystem>
 
 namespace utility // export
 {
-	template <typename DestructionPolicy>
-	class ScopedThread
+	// VS's implementation of ifstream is still broken
+	// (much slower than fread), so fopen it is.
+
+	struct FcloseType
 	{
-		std::thread _thread;
-
-	public:
-		~ScopedThread()
+		void operator () (std::FILE* handle) const
 		{
-			DestructionPolicy()(_thread);
-		}
-
-		ScopedThread(ScopedThread&& other)
-			: _thread(std::move(other._thread))
-		{}
-
-		ScopedThread& operator = (ScopedThread&& other)
-		{
-			_thread = std::move(other._thread);
-			return *this;
-		}
-
-		ScopedThread(std::thread&& thr = std::thread())
-			: _thread(std::move(thr))
-		{}
-
-		auto& get()
-		{
-			return _thread;
-		}
-
-		auto& get() const
-		{
-			return _thread;
-		}
-
-		auto release()
-		{
-			return std::move(_thread);
-		}
-	};
-
-	struct ScopedThreadAutoJoinPolicy
-	{
-		void operator () (std::thread& thr) const
-		{
-			if (thr.joinable())
+			if (handle != nullptr)
 			{
-				thr.join();
+				std::fclose(handle);
 			}
 		}
 	};
 
-	struct ScopedThreadAutoDetachPolicy
+	using FileHandle = std::unique_ptr<std::FILE, FcloseType>;
+
+	namespace filesystem = std::experimental::filesystem;
+
+	template <typename Buffer>
+	Buffer readFileAs(filesystem::path filePath)
 	{
-		void operator () (std::thread& thr) const
+		Buffer buffer;
+
+		std::error_code ec;
+		const auto size = filesystem::file_size(filePath, ec);
+
+		if (!ec && size % sizeof(decltype(buffer[0])) == 0)
 		{
-			if (thr.joinable())
+			FileHandle file(std::fopen(filePath.u8string().c_str(), "rb"));
+
+			if (file != nullptr)
 			{
-				thr.detach();
+				buffer.resize(static_cast<std::size_t>(size));
+				std::fread(buffer.data(), 1, buffer.size(), file.get());
 			}
 		}
-	};
 
-	using AutojoinThread = ScopedThread<ScopedThreadAutoJoinPolicy>;
-	using AutodetachThread = ScopedThread<ScopedThreadAutoDetachPolicy>;
+		return buffer;
+	}
 }

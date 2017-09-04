@@ -1,3 +1,26 @@
+/* 
+ * Copyright (c) 2016 - 2017 cooky451
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+ */
+
 #pragma once
 
 #include "utility/utility.hpp"
@@ -87,7 +110,7 @@ namespace pingstats // export
 
 		static IpEndPoint fromHostname(const char* targetname)
 		{
-			return IpEndPoint(inet_addr(targetname));
+			return IpEndPoint{ inet_addr(targetname) };
 		}
 	};
 
@@ -108,14 +131,13 @@ namespace pingstats // export
 		// buffer and event have to be defined before file, 
 		// so the file gets released before they get.
 
-		alignas(8) std::array<char, 96> buffer = {};
-		wa::HandlePtr event{ wa::HandlePtr{
-			CreateEventW(nullptr, false, false, nullptr) } };
+		alignas(8) std::array<char, 96> buffer{};
+		wa::HandlePtr event{ wa::HandlePtr{ CreateEventW(nullptr, false, false, nullptr) } };
 
-		IcmpFileHandle file{ IcmpFileHandle(IcmpCreateFile()) };
-		cr::steady_clock::time_point sentTime;
-		DWORD timoutMs;
-		DWORD errorCode;
+		IcmpFileHandle file{ IcmpCreateFile() };
+		cr::steady_clock::time_point sentTime{};
+		DWORD timoutMs{};
+		DWORD errorCode{};
 	};
 
 	enum class TraceType
@@ -156,7 +178,7 @@ namespace pingstats // export
 			std::memcpy(&reply, buffer.data(), sizeof reply);
 
 			result.statusCode = reply.Status;
-			result.responder = IpEndPoint(reply.Address);
+			result.responder = IpEndPoint{ reply.Address };
 			result.sysLatency = reply.RoundTripTime;
 		}
 		else
@@ -181,7 +203,7 @@ namespace pingstats // export
 		static_assert(SEND_BYTES <= BUFFER_SIZE);
 		static_assert(RECV_BYTES <= BUFFER_SIZE);
 
-		auto context = std::make_unique<IcmpEchoContext>();
+		auto context{ std::make_unique<IcmpEchoContext>() };
 
 		IpOptionInformationType options{};
 		options.Ttl = ttl;
@@ -222,7 +244,6 @@ namespace pingstats // export
 			context->errorCode = 0;
 
 			const std::array<HANDLE, 2> events{ stopEvent, context->event.get() };
-
 			const auto reason{ WaitForMultipleObjects(2, events.data(), false, timeoutMs) };
 
 			replyTime = cr::steady_clock::now();

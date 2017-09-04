@@ -1,8 +1,32 @@
+/* 
+ * Copyright (c) 2016 - 2017 cooky451
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+ */
+
 #pragma once
 
 #include "resource.h"
 
 #include "utility/utility.hpp"
+#include "utility/read_file.hpp"
 #include "utility/scoped_thread.hpp"
 #include "utility/tree_config.hpp"
 #include "utility/waitable_flag.hpp"
@@ -235,14 +259,14 @@ namespace pingstats // export
 			RECT windowRect;
 			GetWindowRect(_windowHandle, &windowRect);
 
-			const auto width = windowRect.right - windowRect.left;
-			const auto height = windowRect.bottom - windowRect.top;
-			const auto centerX = windowRect.left + width / 2;
-			const auto centerY = windowRect.top + height / 2;
-			const auto defaultWidth = _columns * _sectionWidth;
-			const auto defaultHeight = _rows * _sectionHeight;
-			const auto x = std::max(0l, centerX - defaultWidth / 2);
-			const auto y = std::max(0l, centerY - defaultHeight / 2);
+			const auto width{ windowRect.right - windowRect.left };
+			const auto height{ windowRect.bottom - windowRect.top };
+			const auto centerX{ windowRect.left + width / 2 };
+			const auto centerY{ windowRect.top + height / 2 };
+			const auto defaultWidth{ _columns * _sectionWidth };
+			const auto defaultHeight{ _rows * _sectionHeight };
+			const auto x{ std::max(0l, centerX - defaultWidth / 2) };
+			const auto y{ std::max(0l, centerY - defaultHeight / 2) };
 
 			SetWindowPos(_windowHandle, HWND_TOP, x, y, 
 				defaultWidth, defaultHeight, SWP_SHOWWINDOW);
@@ -271,10 +295,10 @@ namespace pingstats // export
 					const auto row{ static_cast<std::int32_t>(i % _rows) };
 					const auto col{ static_cast<std::int32_t>(i / _rows) };
 
-					const auto left{ ut::fastround<LONG>(
+					const auto left{ fastround<LONG>(
 						col * sectWidth + (1 + col) * BORDER_WIDTH) };
 
-					const auto top{ ut::fastround<LONG>(
+					const auto top{ fastround<LONG>(
 						row * sectHeight + (1 + row) * BORDER_WIDTH) };
 
 					const auto right{ left + static_cast<LONG>(sectWidth) };
@@ -356,6 +380,34 @@ namespace pingstats // export
 			}
 		}
 
+		void asyncWriteLogToFile(const std::string& filename,
+			const std::vector<IcmpEchoResult>& pingResults,
+			const std::vector<IcmpEchoResult>& traceResults)
+		{
+			_writeOperations.push_back(
+				std::async(std::launch::async, 
+					[filename, traceResults, pingResults]() {
+						wa::showMessageBox("Information", "Composing log string.");
+
+						ut::FileHandle file{ std::fopen(filename.c_str(), "wb") };
+
+						if (file.get() != nullptr)
+						{
+							const auto traceStr{ makeLogString(traceResults) };
+							const auto pingStr{ makeLogString(pingResults) };
+
+							std::fwrite(traceStr.data(), 1, traceStr.size(), file.get());
+							std::fwrite(pingStr.data(), 1, pingStr.size(), file.get());
+
+							wa::showMessageBox("Information", "Finished writing log file.");
+						}
+						else
+						{
+							wa::showMessageBox("Error", "Failed to open file.");
+						}
+					}));
+		}
+
 		HandleMessageResult handleMessage(
 			HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 		{
@@ -405,8 +457,8 @@ namespace pingstats // export
 
 			case WM_LBUTTONDOWN:
 			{
-				const auto x = GET_X_LPARAM(lparam);
-				const auto y = GET_Y_LPARAM(lparam);
+				const auto x{ GET_X_LPARAM(lparam) };
+				const auto y{ GET_Y_LPARAM(lparam) };
 
 				_selectionStart = cr::steady_clock::now();
 				_selectedSection = findSection(x, y);
@@ -426,18 +478,18 @@ namespace pingstats // export
 
 			case WM_CONTEXTMENU:
 			{
-				const auto menu = LoadMenuW(
-					GetModuleHandleW(nullptr), 
-					MAKEINTRESOURCEW(CONTEXT_MENU));
+				const auto menu{ LoadMenuW(
+					GetModuleHandleW(nullptr),
+					MAKEINTRESOURCEW(CONTEXT_MENU)) };
 
-				const auto popup = GetSubMenu(menu, 0);
-				const auto flags = TPM_TOPALIGN | TPM_LEFTALIGN | TPM_RETURNCMD;
+				const auto popup{ GetSubMenu(menu, 0) };
+				const auto flags{ TPM_TOPALIGN | TPM_LEFTALIGN | TPM_RETURNCMD };
 
 				const POINT pos{ GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
 				POINT cpt{ pos };
 				ScreenToClient(hwnd, &cpt);
 
-				const auto selection = findSection(cpt.x, cpt.y);
+				const auto selection{ findSection(cpt.x, cpt.y) };
 
 				switch (TrackPopupMenu(popup, flags, pos.x, pos.y, 0, hwnd, nullptr))
 				{
@@ -478,7 +530,7 @@ namespace pingstats // export
 				{
 					if (selection != nullptr)
 					{
-						constexpr DWORD FN_SIZE = 512;
+						constexpr DWORD FN_SIZE{ 512 };
 						wchar_t filename[FN_SIZE] = L"pingstats-log.txt";
 
 						OPENFILENAMEW saveFile = { sizeof saveFile };
@@ -492,37 +544,9 @@ namespace pingstats // export
 
 						if (GetSaveFileNameW(&saveFile))
 						{
-							_writeOperations.push_back(
-								std::async(std::launch::async, [
-									filename = wa::utf8(filename), 
-									traceResults = selection->data.traceResults(), 
-									pingResults = selection->data.pingResults()
-								]()
-								{
-									wa::showMessageBox("Information", "Composing log string.");
-
-									const auto traceStr = makeLogString(traceResults);
-									const auto pingStr = makeLogString(pingResults);
-
-									ut::FileHandle file(std::fopen(filename.c_str(), "wb"));
-
-									if (file.get() != nullptr)
-									{
-										std::fwrite(traceStr.data(), 1, 
-											traceStr.size(), file.get());
-
-										std::fwrite(pingStr.data(), 1, 
-											pingStr.size(), file.get());
-
-										wa::showMessageBox("Information", 
-											"Finished writing log file.");
-									}
-									else
-									{
-										wa::showMessageBox("Error", "Failed to open file.");
-									}
-								}
-							));
+							asyncWriteLogToFile(wa::utf8(filename), 
+								selection->data.traceResults(), 
+								selection->data.pingResults());
 						}
 					}
 				}	break;
@@ -550,22 +574,18 @@ namespace pingstats // export
 					POINT pos;
 					GetCursorPos(&pos);
 
-					const auto menu = LoadMenuW(
-						GetModuleHandleW(nullptr), 
-						MAKEINTRESOURCEW(TRAY_MENU));
+					const auto menu{ LoadMenuW(
+						GetModuleHandleW(nullptr),
+						MAKEINTRESOURCEW(TRAY_MENU)) };
 
-					const auto popup = GetSubMenu(menu, 0);
+					const auto popup{ GetSubMenu(menu, 0) };
 
-					const auto flags = 
-						TPM_RIGHTALIGN | 
-						TPM_BOTTOMALIGN | 
-						TPM_RIGHTBUTTON;
+					const auto flags{ TPM_RIGHTALIGN | TPM_BOTTOMALIGN | TPM_RIGHTBUTTON };
 
 					// Required for correct menu behavior!
 					SetForegroundWindow(hwnd);
 
-					TrackPopupMenu(popup, flags, 
-						pos.x, pos.y, 0, hwnd, nullptr);
+					TrackPopupMenu(popup, flags, pos.x, pos.y, 0, hwnd, nullptr);
 
 					// May be required for correct menu behavior?
 					PostMessageW(hwnd, WM_NULL, 0, 0); 

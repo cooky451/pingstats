@@ -1,3 +1,26 @@
+/* 
+ * Copyright (c) 2016 - 2017 cooky451
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+ */
+
 #pragma once
 
 #include "utility/utility.hpp"
@@ -17,31 +40,31 @@ namespace pingstats // export
 	{
 		std::vector<IcmpEchoResult> _traceResults;
 		std::vector<IcmpEchoResult> _pingResults;
-		const IcmpEchoResult* _lastResult = {};
+		const IcmpEchoResult* _lastResult{};
 
 		std::size_t _historySize = { 2 * 3600 };
 
 		std::string _lastResponder;
 
-		double _meanWeight = { 80.0 };
-		double _jitterWeight = { 40.0 };
-		double _lossWeight = { 40.0 };
+		double _meanWeight{ 80.0 };
+		double _jitterWeight{ 40.0 };
+		double _lossWeight{ 40.0 };
 
-		double _lastPing = {};
-		double _meanPing = {};
-		double _maxPing = {};
-		double _squaredJitter = {};
-		double _jitter = {};
-		double _loss = {};
-		double _lossPercentage = {};
-		double _pixelPerMs = { 1.0 };
-		double _pingOffsetMs = {};
-		double _gridSizeY = { 50.0 };
+		double _lastPing{};
+		double _meanPing{};
+		double _maxPing{};
+		double _squaredJitter{};
+		double _jitter{};
+		double _loss{};
+		double _lossPercentage{};
+		double _pixelPerMs{ 1.0 };
+		double _pingOffsetMs{};
+		double _gridSizeY{ 50.0 };
 
 	public:
 		PingData(ut::TreeConfigNode& config)
 		{
-			auto& statscfg = *config.findOrAppendNode("stats");
+			auto& statscfg{ *config.findOrAppendNode("stats") };
 
 			statscfg.loadOrStore("historySize", _historySize);
 			statscfg.loadOrStore("averagePingWeight", _meanWeight);
@@ -109,23 +132,18 @@ namespace pingstats // export
 			_lastResponder = echoResult.responder.name();
 
 			// Usually near the end.
-			auto insertionPoint = std::upper_bound(
-				_pingResults.begin(), 
-				_pingResults.end(), 
-				echoResult, 
+			auto insertionPoint{ std::upper_bound(
+				_pingResults.begin(),
+				_pingResults.end(),
+				echoResult,
 				[](const auto& lhs, const auto& rhs) {
 					return lhs.sentTime < rhs.sentTime;
 				}
-			);
+			) };
 
-			const auto& result = 
-				*_pingResults.insert(insertionPoint, echoResult);
-
-			const auto isLost = 
-				result.errorCode != 0 || result.statusCode != 0;
-
-			const auto lw = 
-				std::max(1.0 / _lossWeight, 1.0 / _pingResults.size());
+			const auto& result{ *_pingResults.insert(insertionPoint, echoResult) };
+			const auto isLost{ result.errorCode != 0 || result.statusCode != 0 };
+			const auto lw{ std::max(1.0 / _lossWeight, 1.0 / _pingResults.size()) };
 
 			_loss = _loss * (1.0 - lw) + isLost * lw;
 			_lossPercentage = 100.0 * _loss;
@@ -137,7 +155,7 @@ namespace pingstats // export
 
 			if (_pingResults.size() >= _historySize * 2)
 			{
-				std::copy(_pingResults.end() - _historySize,
+				std::copy(_pingResults.end() - _historySize, 
 					_pingResults.end(), _pingResults.begin());
 
 				_pingResults.resize(_historySize);
@@ -169,27 +187,20 @@ namespace pingstats // export
 			_lastPing = ut::milliseconds_f64(result.latency).count();
 			_maxPing = std::max(_maxPing, _lastPing);
 
-			const auto mw = 
-				std::max(1.0 / _meanWeight, 1.0 / _pingResults.size());
+			const auto mw{ std::max(1.0 / _meanWeight, 1.0 / _pingResults.size()) };
 
 			_meanPing = (1.0 - mw) * _meanPing + mw * _lastPing;
 
-			const auto jw = 
-				std::max(1.0 / _jitterWeight, 1.0 / _pingResults.size());
-
-			const auto sd = 
-				(_meanPing - _lastPing) * (_meanPing - _lastPing);
+			const auto jw{ std::max(1.0 / _jitterWeight, 1.0 / _pingResults.size()) };
+			const auto sd{ (_meanPing - _lastPing) * (_meanPing - _lastPing) };
 
 			_squaredJitter = (1.0 - jw) * _squaredJitter + jw * sd;
 			_jitter = std::sqrt(_squaredJitter);
 
-			constexpr auto HEIGHT = 200.0;
+			constexpr auto HEIGHT{ 200.0 };
 
-			const auto optimalPixelPerMs = 
-				HEIGHT / ((_meanPing) * 2.0 + _jitter);
-
-			const auto pixelPerMsDiff =
-				std::abs(optimalPixelPerMs - _pixelPerMs);
+			const auto optimalPixelPerMs{ HEIGHT / ((_meanPing) * 2.0 + _jitter) };
+			const auto pixelPerMsDiff{ std::abs(optimalPixelPerMs - _pixelPerMs) };
 
 			if (pixelPerMsDiff / optimalPixelPerMs > 0.2)
 			{
@@ -204,7 +215,7 @@ namespace pingstats // export
 					_pixelPerMs = std::min(HEIGHT / 20.0, optimalPixelPerMs);
 					_pingOffsetMs = 0.0;
 
-					const auto assumedHeight = HEIGHT / _pixelPerMs;
+					const auto assumedHeight{ HEIGHT / _pixelPerMs };
 
 					_gridSizeY =
 						assumedHeight >= 300.0 ?
@@ -219,15 +230,15 @@ namespace pingstats // export
 
 	std::time_t makeTimeStamp(cr::steady_clock::time_point tp)
 	{
-		const auto dur = cr::duration_cast<
-			cr::system_clock::duration>(tp - cr::steady_clock::now());
+		const auto dur{ cr::duration_cast<
+			cr::system_clock::duration>(tp - cr::steady_clock::now()) };
 
 		return cr::system_clock::to_time_t(cr::system_clock::now() + dur);
 	}
 
 	std::string makeTimestampString(cr::steady_clock::time_point tp)
 	{
-		auto stamp = makeTimeStamp(tp);
+		auto stamp{ makeTimeStamp(tp) };
 
 		std::tm tm;
 		localtime_s(&tm, &stamp);
@@ -249,7 +260,7 @@ namespace pingstats // export
 				makeTimestampString(result.sentTime).c_str(),
 				result.errorCode, result.statusCode,
 				result.responder.name().c_str(),
-				ut::milliseconds_f64(result.latency).count(), 
+				ut::milliseconds_f64{ result.latency }.count(),
 				result.sysLatency);
 		}
 

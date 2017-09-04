@@ -1,9 +1,34 @@
+/* 
+ * Copyright (c) 2016 - 2017 cooky451
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ * 
+ */
+
 #pragma once
 
 #include "utility/utility.hpp"
 #include "utility/tree_config.hpp"
 
 #include "winapi/utility.hpp"
+
+#include "utility.hpp"
 
 namespace pingstats // export
 {
@@ -89,7 +114,7 @@ namespace pingstats // export
 
 	constexpr Color mergeColors(Color c0, Color c1, double weight)
 	{
-		const auto w{ ut::fastround<uintptr_t>(weight * 256.0) };
+		const auto w{ fastround<uintptr_t>(weight * 256.0) };
 		const auto rw{ 256 - w };
 
 		return Color{
@@ -165,8 +190,7 @@ namespace pingstats // export
 		}
 	}
 
-	void copyCanvasRect(
-		wa::MemoryCanvas& dest, wa::MemoryCanvas& source,
+	void copyCanvasRect(wa::MemoryCanvas& dest, wa::MemoryCanvas& source,
 		const Rect& destRect, std::size_t sourceX, std::size_t sourceY)
 	{
 		const auto sptr{ source.pixelPtr() };
@@ -189,8 +213,7 @@ namespace pingstats // export
 		}
 	}
 
-	void plot(
-		wa::MemoryCanvas& canvas, const Rect& clip, 
+	void plot(wa::MemoryCanvas& canvas, const Rect& clip, 
 		pxindex x, pxindex y, Color color, double weight)
 	{
 		if (x >= clip.left && 
@@ -202,9 +225,8 @@ namespace pingstats // export
 		}
 	}
 
-	void plot(
-		wa::MemoryCanvas& canvas, const Rect& clip, 
-		pxindex x, pxindex y, Color color)
+	void plot(wa::MemoryCanvas& canvas, 
+		const Rect& clip, pxindex x, pxindex y, Color color)
 	{
 		if (x >= clip.left &&
 			x < clip.right &&
@@ -215,9 +237,8 @@ namespace pingstats // export
 		}
 	}
 
-	void drawHorizontalLine(
-		wa::MemoryCanvas& canvas, const Rect& clip, 
-		Color color, pxindex y, pxindex x0, pxindex x1)
+	void drawHorizontalLine(wa::MemoryCanvas& canvas, 
+		const Rect& clip, Color color, pxindex y, pxindex x0, pxindex x1)
 	{
 		if (y >= clip.top && y < clip.bottom)
 		{
@@ -243,9 +264,8 @@ namespace pingstats // export
 		}
 	}
 
-	void drawVerticalLine(
-		wa::MemoryCanvas& canvas, const Rect& clip, 
-		Color color, pxindex x, pxindex y0, pxindex y1)
+	void drawVerticalLine(wa::MemoryCanvas& canvas, 
+		const Rect& clip, Color color, pxindex x, pxindex y0, pxindex y1)
 	{
 		if (x >= clip.left && x < clip.right)
 		{
@@ -301,7 +321,7 @@ namespace pingstats // export
 			{
 			default:
 			{
-				const auto y{ ut::fastround<pxindex>(ry) };
+				const auto y{ fastround<pxindex>(ry) };
 
 				if (!isSteep)
 				{
@@ -332,7 +352,7 @@ namespace pingstats // export
 
 			case 2:
 			{
-				const auto y{ ut::fastround<pxindex>(ry) };
+				const auto y{ fastround<pxindex>(ry) };
 				const auto weight{ fracpart(ry + 0.5) };
 
 				if (!isSteep)
@@ -377,9 +397,9 @@ namespace pingstats // export
 		}
 
 		const auto gradient{ (y1 - y0) / (x1 - x0) };
-		const auto xstart{ ut::fastround<pxindex>(x0) };
+		const auto xstart{ fastround<pxindex>(x0) };
 		const auto ystart{ y0 + gradient * (xstart - x0) };
-		const auto xend{ ut::fastround<pxindex>(x1) };
+		const auto xend{ fastround<pxindex>(x1) };
 		const auto yend{ y1 + gradient * (xend - x1) };
 
 		if (isStartTransparent)
@@ -409,7 +429,7 @@ namespace pingstats // export
 				{
 				default:
 				{
-					plot(canvas, clip, x, ut::fastround<pxindex>(ry), color, 1);
+					plot(canvas, clip, x, fastround<pxindex>(ry), color, 1);
 				}	break;
 
 				case 1:
@@ -422,7 +442,7 @@ namespace pingstats // export
 
 				case 2:
 				{
-					const auto y{ ut::fastround<pxindex>(ry) };
+					const auto y{ fastround<pxindex>(ry) };
 					const auto weight{ fracpart(ry + 0.5) };
 					plot(canvas, clip, x, y - 1, color, 1 - weight);
 					plot(canvas, clip, x, y + 0, color, 1);
@@ -439,7 +459,7 @@ namespace pingstats // export
 				{
 				default:
 				{
-					plot(canvas, clip, ut::fastround<pxindex>(ry), x, color, 1);
+					plot(canvas, clip, fastround<pxindex>(ry), x, color, 1);
 				}	break;
 
 				case 1:
@@ -452,7 +472,7 @@ namespace pingstats // export
 
 				case 2:
 				{
-					const auto y{ ut::fastround<pxindex>(ry) };
+					const auto y{ fastround<pxindex>(ry) };
 					const auto weight{ fracpart(ry + 0.5) };
 					plot(canvas, clip, y - 1, x, color, 1 - weight);
 					plot(canvas, clip, y + 0, x, color, 1);
@@ -466,9 +486,8 @@ namespace pingstats // export
 	}
 
 	template <unsigned THICKNESS>
-	void drawPrettyLines(
-		wa::MemoryCanvas& canvas, const Rect& clip, 
-		const Vertex* vertices, std::size_t nVertices)
+	void drawPrettyLines(wa::MemoryCanvas& canvas, 
+		const Rect& clip, const Vertex* vertices, std::size_t nVertices)
 	{
 		if (nVertices >= 2)
 		{
@@ -503,11 +522,11 @@ namespace pingstats // export
 	{
 		for (size_t i = 0; i + 1 < nVertices; ++i)
 		{
-			const auto x0{ ut::fastround<pxindex>(vertices[i].x) };
-			const auto y0{ ut::fastround<pxindex>(vertices[i].y) };
+			const auto x0{ fastround<pxindex>(vertices[i].x) };
+			const auto y0{ fastround<pxindex>(vertices[i].y) };
 			const auto c0{ vertices[i].color };
-			const auto x1{ ut::fastround<pxindex>(vertices[i + 1].x) };
-			const auto y1{ ut::fastround<pxindex>(vertices[i + 1].y) };
+			const auto x1{ fastround<pxindex>(vertices[i + 1].x) };
+			const auto y1{ fastround<pxindex>(vertices[i + 1].y) };
 			const auto c1{ vertices[i + 1].color };
 
 			drawHorizontalLine(canvas, clip, c0, y0, x0, x1);
