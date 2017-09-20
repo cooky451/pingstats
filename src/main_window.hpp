@@ -214,7 +214,7 @@ namespace pingstats // export
 			setAlwaysOnTop(_alwaysOnTop);
 
 			auto refreshRate{ 30 };
-			config.loadOrStoreIndirect("refreshRate", refreshRate);
+			config.loadOrStore("refreshRate", refreshRate);
 
 			refreshRate = std::min(240, std::max(1, refreshRate));
 
