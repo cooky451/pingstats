@@ -180,7 +180,7 @@ namespace pingstats // export
 
 		for (std::size_t j{}; j < height; ++j)
 		{
-			const auto line{ &ptr[x + j * w] };
+			const auto line{ &ptr[x + (y + j) * w] };
 
 			// Generates rep stos, don't change to fill/fill_n.
 			for (std::size_t i{}; i < width; ++i)
@@ -306,6 +306,8 @@ namespace pingstats // export
 		bool isFirst, 
 		bool isLast)
 	{
+		static_assert(THICKNESS <= 2, "Maximum thickness is 2.");
+
 		const auto fracpart{ [](double x) {
 			return x - static_cast<pxindex>(x);
 		} };
