@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 
+#include <Ws2tcpip.h>
 #include <Iphlpapi.h>
 #include <Icmpapi.h>
 
@@ -105,12 +106,47 @@ namespace pingstats // export
 
 		std::string name() const
 		{
-			return inet_ntoa(*reinterpret_cast<const in_addr*>(&_ipv4Addr));
+			char buffer[512];
+
+			if (inet_ntop(AF_INET, &_ipv4Addr, buffer, sizeof buffer) == nullptr)
+			{
+				throw std::runtime_error("Generating name for IP failed.");
+			}
+
+			return buffer;
 		}
 
 		static IpEndPoint fromHostname(const char* targetname)
 		{
-			return IpEndPoint{ inet_addr(targetname) };
+			struct AddrInfo
+			{
+				addrinfo* addr{};
+
+				~AddrInfo()
+				{
+					freeaddrinfo(addr);
+				}
+			};
+
+			AddrInfo info;
+			
+			int ec{ getaddrinfo(targetname, nullptr, nullptr, &info.addr) };
+
+			if (!ec)
+			{
+				for (auto addr{ info.addr }; addr != nullptr; addr = addr->ai_next)
+				{
+					if (addr->ai_family == AF_INET)
+					{
+						auto addr_in{ reinterpret_cast<sockaddr_in*>(addr->ai_addr) };
+						return IpEndPoint{ addr_in->sin_addr.s_addr };
+					}
+				}
+			}
+
+			throw std::runtime_error(
+				"Unable to resolve hostname \""s + targetname + 
+				"\".\r\nCode: " + std::to_string(ec));
 		}
 	};
 

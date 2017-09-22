@@ -33,5 +33,6 @@ namespace pingstats // export
 		WM_REDRAW, 
 		WM_PING_RESULT, 
 		WM_TRACE_RESULT, 
+		WM_CRITICAL_PING_MONITOR_ERROR, 
 	};
 }

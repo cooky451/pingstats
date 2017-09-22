@@ -441,6 +441,19 @@ namespace pingstats // export
 					*reinterpret_cast<IcmpEchoResult*>(lparam));
 			}	return{ 0 };
 
+			case WM_CRITICAL_PING_MONITOR_ERROR:
+			{
+				if (lparam != 0)
+				{
+					auto e = reinterpret_cast<std::exception*>(lparam);
+					wa::showMessageBox("Error", e->what());
+				}
+				else
+				{
+					wa::showMessageBox("Error", "Unknown error.");
+				}
+			}	return { 0 };
+
 			case WM_PAINT:
 			{
 				drawWindow(hwnd);

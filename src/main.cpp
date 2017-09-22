@@ -21,6 +21,8 @@
  * 
  */
 
+#define _WINSOCKAPI_
+
 #include "canvas_drawing.hpp"
 #include "utility/utility.hpp"
 #include "winapi/utility.hpp"
@@ -138,6 +140,12 @@ int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE, LPWSTR, int show) try
 	//AllocConsole();
 	//freopen("CONOUT$", "w", stdout);
 
+	WSADATA wsadata;
+	if (WSAStartup(WINSOCK_VERSION, &wsadata) != 0)
+	{
+		throw std::runtime_error("WSAStartup failed.");
+	}
+
 	// Increases sleep/wait resolution
 	TimePeriod timePeriod{ 1 };
 
@@ -145,7 +153,7 @@ int WINAPI wWinMain(HINSTANCE hinstance, HINSTANCE, LPWSTR, int show) try
 	IcmpFileHandle icmpDummy{ IcmpCreateFile() };
 
 	static constexpr wchar_t WND_CLASSNAME[]{ L"MainWindowClass" };
-	static constexpr wchar_t WND_TITLE[]{ L"pingstats v2.0.3" };
+	static constexpr wchar_t WND_TITLE[]{ L"pingstats v2.0.4" };
 
 	WNDCLASSEXW windowClassEx{};
 	windowClassEx.cbClsExtra = 0;

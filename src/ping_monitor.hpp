@@ -73,7 +73,19 @@ namespace pingstats // export
 			config.loadOrStore("pingIntervalMs", _pingIntervalMs);
 			config.loadOrStore("pingTimeoutMs", _pingTimeoutMs);
 
-			_thread = std::thread([this] { run(); });
+			_thread = std::thread([this] { 
+				try{ run(); }
+				catch (std::exception& e)
+				{
+					SendMessageW(_resultHandler, 
+						WM_CRITICAL_PING_MONITOR_ERROR, 
+						0, reinterpret_cast<LPARAM>(&e));
+				}
+				catch (...)
+				{
+					SendMessageW(_resultHandler, WM_CRITICAL_PING_MONITOR_ERROR, 0, 0);
+				}
+			});
 		}
 
 	private:
